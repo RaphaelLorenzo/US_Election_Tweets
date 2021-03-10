@@ -23,6 +23,7 @@ import random
 import matplotlib.lines as mlines
 from textblob import TextBlob
 
+
 path_clean='D:/PROJET PYTHON/cleantweets'
 path_plot='D:/PROJET PYTHON/figs'
 

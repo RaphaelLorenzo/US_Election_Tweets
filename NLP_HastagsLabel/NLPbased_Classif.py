@@ -26,126 +26,82 @@ from textblob.classifiers import NaiveBayesClassifier
 from textblob.sentiments import NaiveBayesAnalyzer
 from textblob import Blobber
 from textblob.sentiments import PatternAnalyzer
-import torch
-from keras.callbacks import EarlyStopping
-from keras.layers import Dense, Dropout
-from keras.models import Sequential
-from keras.optimizers import Adagrad
-from sklearn.decomposition import PCA
-from sklearn.metrics import classification_report, f1_score
-from sklearn.utils import class_weight
 from tqdm import tqdm
-from transformers import AutoModel, AutoTokenizer
-import json
 import nltk
 from nltk.corpus import stopwords
 nltk.download('stopwords')
 
-path_clean='D:/PROJET PYTHON/2020cleantweets'
-path_plot='D:/PROJET PYTHON/figs'
-
-filenames=[]
-for i in range(0,600):
-    filenames.append("cleantweets_"+str(i)+".csv")
-
-def getMaxFile():
-    for i,name in enumerate(filenames):
-        if os.path.isfile(path_clean+'/'+name):
-            print(name+ " exists")
-        else:
-            print(name+ " does not exists")
-            return(i-1)
-            break
-
-#%% FILTER
-
-def FilterTweets(tweets,include_rt=True,include_quote=True,include_reply=True):
-    n_tweets=tweets
-    if include_rt==False:
-        n_tweets=n_tweets[tweets["tweet_type"]!="Retweet"]
-    if include_quote==False:
-        n_tweets=n_tweets[tweets["tweet_type"]!="Quote"]
-    if include_reply==False:
-        n_tweets=n_tweets[tweets["tweet_type"]!="Reply"]
-    return(n_tweets)
-
-
-#%% LOAD ALL TWEETS
-#Settings
-include_rt=False
-include_quote=False
-include_reply=False
-#Models were not trained on replys and quotes so we focus on classifying pure tweets
-
-election_2020_tweets=pd.read_csv(path_clean+'/cleantweets_0.csv',sep=";")
-election_2020_tweets=FilterTweets(election_2020_tweets,include_rt=include_rt,include_quote=include_quote,include_reply=include_reply)
-election_temp=[]
-#for i in range(1,int(getMaxFile())+1):
-for i in range(1,592):
-
-    start=time.time()
-    tempfile=pd.read_csv(path_clean+"/cleantweets_"+str(i)+".csv",sep=";")
-    election_temp.append(FilterTweets(tempfile,include_rt=include_rt,include_quote=include_quote,include_reply=include_reply))
-    end=time.time()
-    print("Added tweet file number : "+str(i)+" in "+str(end-start)+" seconds")
-
-election_2020_tweets=election_2020_tweets.append(election_temp)
-election_2020_tweets.index=pd.RangeIndex(0,len(election_2020_tweets))
-    
-
-#%% Tweets classification : Naive Bayes Classifier
+path="D:/US_Election_Tweets_Local"
 
 #%% Read train and test datas
-train2016=pd.read_csv("D:/PROJET PYTHON/tweets_train_2016.csv")
-test2016=pd.read_csv("D:/PROJET PYTHON/tweets_test_2016.csv")
+train2016=pd.read_csv(path+"/NLP_HastagsLabel/tweets_train_2016.csv")
+test2016=pd.read_csv(path+"/NLP_HastagsLabel/tweets_test_2016.csv")
 
-train2020=pd.read_csv("D:/PROJET PYTHON/tweets_train_2020.csv")
-test2020=pd.read_csv("D:/PROJET PYTHON/tweets_test_2020.csv")
+train2020=pd.read_csv(path+"/NLP_HastagsLabel/tweets_train_2020.csv")
+test2020=pd.read_csv(path+"/NLP_HastagsLabel/tweets_test_2020.csv")
 
-#%% Prentrained Naive Bayes Classifier
-#Requires training ! Using the default function is trained on a Movie Review Corpus
+#unicode text
+train2016['clean_text']=train2016['clean_text'].values.astype('U')
+test2016['clean_text']=test2016['clean_text'].values.astype('U')
+train2020['clean_text']=train2020['clean_text'].values.astype('U')
+test2020['clean_text']=test2020['clean_text'].values.astype('U')
+train2016['text']=train2016['text'].values.astype('U')
+test2016['text']=test2016['text'].values.astype('U')
+train2020['text']=train2020['text'].values.astype('U')
+test2020['text']=test2020['text'].values.astype('U')
+#%% Pretrained models : NBC and Pattern Analyzer
+#Using pretrained models (with movie reviews) of TextBlob,
+# then evaluating for each tweets if it is positive of negative, 
+#then using the mentions in the tweet determining if it's postivive 
+#or negative towards republicans or democrats
 
-# Importing the NaiveBayesAnalyzer classifier from NLTK
-tb = Blobber(analyzer=NaiveBayesAnalyzer())
+#Of course if a tweet does not mention Republicans or Democrats or both then it cant be classified
 
-#Using only already classified tweets to evaluate the quality of the model
-class_df=test2016
-
-sent=[]
-p_pos=[]
-p_neg=[]
-for i in tqdm(range(len(class_df))):
-    #print(i)
-    blob_object=tb(class_df.loc[i,'text'])
-    analysis = blob_object.sentiment
-    sent.append(analysis[0])
-    p_pos.append(analysis[1])
-    p_neg.append(analysis[2])
-
-class_df["sentiment"]=sent
-class_df["proba_pos"]=p_pos
-class_df["proba_neg"]=p_neg
+#%% Pretrained Naive Bayes Classifier
+#Using the default function trained on a Movie Review Corpus
 
 
-class_df['Classif_Bayes']="None"
-class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Bayes']="Democrat"
-class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Bayes']="Republican"
-class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Bayes']="Republican"
-class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Bayes']="Democrat"
-class_df.loc[(class_df["mentions_dem"].apply(len)==2)&(class_df["mentions_rep"].apply(len)==2),'Classif_Bayes']="Und"
-class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["mentions_rep"].apply(len)>2),'Classif_Bayes']="Und"
+def TestNBC_Pretrained(testdatas,text_type="text"):
+    class_df=testdatas
+    tb = Blobber(analyzer=NaiveBayesAnalyzer())
+    sent=[]
+    p_pos=[]
+    p_neg=[]
+    for i in tqdm(range(len(class_df))):
+        #print(i)
+        blob_object=tb(class_df.loc[i,text_type])
+        analysis = blob_object.sentiment
+        sent.append(analysis[0])
+        p_pos.append(analysis[1])
+        p_neg.append(analysis[2])
+    
+    class_df["sentiment"]=sent
+    class_df["proba_pos"]=p_pos
+    class_df["proba_neg"]=p_neg
+    
+    
+    class_df['Classif_Bayes']="None"
+    class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Bayes']="Democrat"
+    class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Bayes']="Republican"
+    class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Bayes']="Republican"
+    class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Bayes']="Democrat"
+    class_df.loc[(class_df["mentions_dem"].apply(len)==2)&(class_df["mentions_rep"].apply(len)==2),'Classif_Bayes']="Und"
+    class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["mentions_rep"].apply(len)>2),'Classif_Bayes']="Und"
+    
+    class_df['Classif_Bayes_Accurate']=(class_df['Classif_Bayes']==class_df['label'])
 
-
-class_df['Classif_Bayes_Accurate']=(class_df['Classif_Bayes']==class_df['label'])
-class_df['Classif_Bayes_Accurate'].value_counts()
-#Raw accuracy (no undefined) : 33.25% (2016)
-#Raw accuracy (no undefined) : 32.6% (2020)
-
-class_df.loc[class_df['Classif_Bayes']=="Und","Classif_Bayes_Accurate"]="Und"
-class_df['Classif_Bayes_Accurate'].value_counts()
-
-#Widthdraw the Undefined because no clear mention, and it's a 50.19% accuracy and 715 Und (2016)
-#Widthdraw the Undefined because no clear mention, and it's a 54.84% accuracy and 811 Und (2020)
+    class_df.loc[class_df['Classif_Bayes']=="Und","Classif_Bayes_Accurate"]="Und"
+    
+    cross_accuracy_stats=pd.crosstab(class_df["label"],class_df["Classif_Bayes_Accurate"])
+    cross_accuracy_stats["accuracy"]=cross_accuracy_stats[True]/(cross_accuracy_stats[True]+cross_accuracy_stats[False]) 
+    acc=class_df['Classif_Bayes_Accurate'].value_counts()
+    print("********** Number of undefined "+str(acc["Und"])+" ************")
+    acc=acc.drop("Und")
+    
+    return(acc,cross_accuracy_stats)
+#Using already classified tweets to evaluate the quality of the model
+TestNBC_Pretrained(test2016)
+TestNBC_Pretrained(test2016,text_type="clean_text")
 
 #%% Pattern Analyzer
 #Here to see how a pattern analyzer is differnet than the NaiveBayesClassifier
@@ -157,88 +113,59 @@ class_df['Classif_Bayes_Accurate'].value_counts()
 # 2) subjectivity: objective vs. subjective (+0.0 => +1.0)
 # 3)    intensity: modifies next word?      (x0.5 => x2.0)
 
-tb = Blobber(analyzer=PatternAnalyzer())
+def TestPA_Pretrained(testdatas,text_type="text"):
+    tb = Blobber(analyzer=PatternAnalyzer())
+    
+    
+    class_df=testdatas
+    
+    sent=[]
+    polarity=[]
+    subjectivity=[]
+    
+    for i in tqdm(range(len(class_df))):
+        #print(i)
+        blob_object=tb(class_df.loc[i,text_type])
+        analysis = blob_object.sentiment
+        if analysis[0]>=0:
+            sent_loc="pos"
+        elif analysis[0]<0:
+            sent_loc="neg"
+        sent.append(sent_loc)
+        polarity.append(analysis[0])
+        subjectivity.append(analysis[1])
+    
+    class_df["sentiment"]=sent
+    class_df["polarity"]=polarity
+    class_df["subjectivity"]=subjectivity
+    
+    
+    class_df['Classif_Pattern']="None"
+    class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Pattern']="Democrat"
+    class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Pattern']="Republican"
+    class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Pattern']="Republican"
+    class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Pattern']="Democrat"
+    class_df.loc[(class_df["mentions_dem"].apply(len)==2)&(class_df["mentions_rep"].apply(len)==2),'Classif_Pattern']="Und"
+    class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["mentions_rep"].apply(len)>2),'Classif_Pattern']="Und"
+    
+    
+    class_df['Classif_Pattern_Accurate']=(class_df['Classif_Pattern']==class_df['label'])
+    class_df.loc[class_df['Classif_Pattern']=="Und","Classif_Pattern_Accurate"]="Und"
+    
+    cross_accuracy_stats=pd.crosstab(class_df["label"],class_df["Classif_Pattern_Accurate"])
+    cross_accuracy_stats["accuracy"]=cross_accuracy_stats[True]/(cross_accuracy_stats[True]+cross_accuracy_stats[False]) 
+    acc=class_df['Classif_Pattern_Accurate'].value_counts()
+    print("********** Number of undefined "+str(acc["Und"])+" ************")
+    acc=acc.drop("Und")
+    return(acc,cross_accuracy_stats)
 
-
-class_df=test2016
-
-sent=[]
-polarity=[]
-subjectivity=[]
-
-for i in tqdm(range(len(class_df))):
-    #print(i)
-    blob_object=tb(class_df.loc[i,'text'])
-    analysis = blob_object.sentiment
-    if analysis[0]>=0:
-        sent_loc="pos"
-    elif analysis[0]<0:
-        sent_loc="neg"
-    sent.append(sent_loc)
-    polarity.append(analysis[0])
-    subjectivity.append(analysis[1])
-
-class_df["sentiment"]=sent
-class_df["polarity"]=polarity
-class_df["subjectivity"]=subjectivity
-
-
-class_df['Classif_Pattern']="None"
-class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Pattern']="Democrat"
-class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Pattern']="Republican"
-class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="pos"),'Classif_Pattern']="Republican"
-class_df.loc[(class_df["mentions_rep"].apply(len)>2)&(class_df["sentiment"]=="neg"),'Classif_Pattern']="Democrat"
-class_df.loc[(class_df["mentions_dem"].apply(len)==2)&(class_df["mentions_rep"].apply(len)==2),'Classif_Pattern']="Und"
-class_df.loc[(class_df["mentions_dem"].apply(len)>2)&(class_df["mentions_rep"].apply(len)>2),'Classif_Pattern']="Und"
-
-
-class_df['Classif_Pattern_Accurate']=(class_df['Classif_Pattern']==class_df['label'])
-class_df['Classif_Pattern_Accurate'].value_counts()
-#Raw accuracy (no undefined) : 34.75% (2016)
-#Raw accuracy (no undefined) : 38.5% (2020)
-
-class_df.loc[class_df['Classif_Pattern']=="Und","Classif_Pattern_Accurate"]="Und"
-class_df['Classif_Pattern_Accurate'].value_counts()
-#Widthdraw the Undefined because no clear mention, and it's a 53.93% accuracy and 715 Und (2016)
-#Widthdraw the Undefined because no clear mention, and it's a 64.76% accuracy and 811 Und (2020)
+TestPA_Pretrained(test2016)
+TestPA_Pretrained(test2016,text_type="clean_text")
 
 #%% Custom models
-#%% v0 Custom NaiveBayesClassifier
+#Using training datas to train a NBC and BERT models
 
-#The v0_... sets are made of the 10 first files, with an inequal class distribution (the distribution is not as inequal in the global dataset)
-
-
-# with open('F:/PROJET PYTHON/v0_tweets_train_2020.json', 'r') as train2020:
-#     cl = NaiveBayesClassifier(train2020, format="json")
-    
-# cl.show_informative_features(10) 
-
-# blob = TextBlob("There are important complete cuts", classifier=cl)
-# blob.classify()
-# #No lemmatization, cut=/=cuts etc.
-# #Of course no pattern context
-
-# test2020=pd.read_csv("F:/PROJET PYTHON/v0_tweets_test_2020.csv")
-
-# def classtweet(a):
-#     tb=TextBlob(a, classifier=cl)
-#     return(tb.classify())
-    
-# test2020["classif"]=test2020["text"].apply(classtweet)
-# test2020["classif_accurate"]=(test2020["classif"]==test2020["label"])
-
-# test2020["classif"].value_counts()
-# test2020["label"].value_counts()
-# cross_accuracy_stats=pd.crosstab(test2020["label"],test2020["classif_accurate"])
-# cross_accuracy_stats
-# #Overfit in the Republican Category / Need to be tested on other Train/Test split
-
-# test2020["classif_accurate"].value_counts()
-#Quite better !
-
-##Classifies too widely in the Republican category, the initial weight of the two classes should maybe be more close
-
-#%%New custom NaiveBayesClassifier
+#%%New custom NaiveBayesClassifier (too long with TextBlob)
 
 # with open('D:/PROJET PYTHON/tweets_train_2020.json', 'r') as train2020:
 #     cl = NaiveBayesClassifier(train2020, format="json")
@@ -273,287 +200,431 @@ class_df['Classif_Pattern_Accurate'].value_counts()
 # class_df["classif_accurate"].value_counts()
 #More equilibrate
 
-#%% Try the sklearn version
+#%% Custom NBC : sklearn version
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import make_pipeline
 
-class_df=test2020
+def Test_NBC_Custom(traindatas,testdatas,text_type="text",ngram_max=3,proba_gap_thres=0.2):
+    class_df=testdatas    
+    model = make_pipeline(TfidfVectorizer(stop_words="english",ngram_range=(1,ngram_max)), MultinomialNB())
+    model.fit(traindatas[text_type], traindatas['label'])
+    
+    classif_bis=model.predict(class_df[text_type])
+    predicted_proba=model.predict_proba(class_df[text_type])
+    gap=abs(predicted_proba[:,1]-predicted_proba[:,0])
+    
+    
+    class_df['classif_custom_bayes']=classif_bis
+    class_df['classif_proba_gap']=gap
+    class_df["classif_custom_bayes_accurate"]=(class_df["classif_custom_bayes"]==class_df["label"])
 
-model = make_pipeline(TfidfVectorizer(stop_words="english",ngram_range=(1,3)), MultinomialNB())
-model.fit(train2020['text'], train2020['label'])
+    cross_accuracy_stats=pd.crosstab(class_df.loc[class_df["classif_proba_gap"]>proba_gap_thres,"label"],class_df.loc[class_df["classif_proba_gap"]>proba_gap_thres,"classif_custom_bayes_accurate"])
+    cross_accuracy_stats["accuracy"]=cross_accuracy_stats[True]/(cross_accuracy_stats[True]+cross_accuracy_stats[False])  
+    
+    features=model._final_estimator.feature_log_prob_
+    model._final_estimator.classes_
+    model._final_estimator.coef_
+    
+    vectorizer=TfidfVectorizer(stop_words="english",ngram_range=(1,3))
+    vectorizer.fit_transform(traindatas[text_type])
+    feature_names=vectorizer.get_feature_names()
+    
+    feature_importance=pd.DataFrame(np.exp(features.transpose()))
+    feature_importance["name"]=feature_names
+    feature_dem_ratio=feature_importance[0]/feature_importance[1]
+    feature_importance["dem_ratio"]=feature_dem_ratio
+    feature_importance.columns=["P(X|Y=dem)","P(X|Y=rep)","feature","Ratio Dem"]
+    print("********** Important features ************")
+    print(feature_importance.sort_values(by="Ratio Dem"))
+    
+    print("********** Number of undefined = "+str(len(class_df.loc[class_df["classif_proba_gap"]<=proba_gap_thres]))+" ("+str(len(class_df.loc[class_df["classif_proba_gap"]<=proba_gap_thres])*100/len(class_df))+"%) ************")
 
-classif_bis=model.predict(class_df["text"])
-predicted_proba=model.predict_proba(class_df["text"])
-gap=abs(predicted_proba[:,1]-predicted_proba[:,0])
+    return(class_df.loc[class_df["classif_proba_gap"]>proba_gap_thres,"classif_custom_bayes_accurate"].value_counts(),cross_accuracy_stats)
 
+Test_NBC_Custom(train2016,test2016,text_type="clean_text")
 
-class_df['classif_custom_bayes']=classif_bis
-class_df['classif_proba_gap']=gap
-
-class_df["classif_custom_bayes_accurate"]=(class_df["classif_custom_bayes"]==class_df["label"])
-class_df["classif_custom_bayes_accurate"].value_counts() 
-#67.55% accuracy (2016)
-#55.35% accuracy (2020 with 2016 data training)
-#67.15% accuracy (2020)
-
-
-cross_accuracy_stats=pd.crosstab(class_df["label"],class_df["classif_custom_bayes_accurate"])
-cross_accuracy_stats["accuracy"]=cross_accuracy_stats[True]/(cross_accuracy_stats[True]+cross_accuracy_stats[False]) 
-cross_accuracy_stats 
-#errors are not equally reparted, overclassification in the Democrat label (2016)
-#errors are not equally reparted, overclassification in the Democrat label (2020 with 2016 data training)
-#errors are equally reparted (2020)
-
-sns.histplot(data=class_df,x="classif_proba_gap")
-class_df.loc[class_df["classif_proba_gap"]>0.2,"classif_custom_bayes_accurate"].value_counts() 
-#81.74% accuracy and 48% (965) tweets classified (2016)
-#62.36% accuracy and 32% (659) tweets classified (2020 with 2016 data training
-#83.75% accuracy and 41% (831) tweets classified (2016)
-
-cross_accuracy_stats=pd.crosstab(class_df.loc[class_df["classif_proba_gap"]>0.2,"label"],class_df.loc[class_df["classif_proba_gap"]>0.2,"classif_custom_bayes_accurate"])
-cross_accuracy_stats["accuracy"]=cross_accuracy_stats[True]/(cross_accuracy_stats[True]+cross_accuracy_stats[False]) 
-cross_accuracy_stats 
-#Errors are equally reparted (2016)
-#Errors are equally reparted (2020 with 2016 training datas)
-#Errors are equally reparted (2020)
-
-features=model._final_estimator.feature_log_prob_
-model._final_estimator.classes_
-model._final_estimator.coef_
-
-vectorizer=TfidfVectorizer(stop_words="english",ngram_range=(1,3))
-vectorized=vectorizer.fit_transform(train2020['text'])
-feature_names=vectorizer.get_feature_names()
-
-feature_importance=pd.DataFrame(np.exp(features.transpose()))
-feature_importance["name"]=feature_names
-feature_dem_ratio=feature_importance[0]/feature_importance[1]
-feature_importance["dem_ratio"]=feature_dem_ratio
-feature_importance.columns=["P(X|Y=dem)","P(X|Y=rep)","feature","Ratio Dem"]
-
-#%% Classify all tweets with custom NBC
-
-# class_df=text_df
-
-# Classif_Bayes_Custom=[]
-# for i in tqdm(range(len(class_df))):
-#     #print(i)
-#     tb=TextBlob(class_df.loc[i,'real_clean_text'],classifier=cl)
-#     Classif_Bayes_Custom.append(tb.classify())
-
-# class_df['Classif_Bayes_Custom']=Classif_Bayes_Custom
-
-#60 it/sec, NBC trained with 2000 (1000/1000) tweets take hours 
-
-#%% Classify all tweets with custom NBC using sklearn
-############# Chosen classification for 2016 tweets ###############
-
-train2020 = pd.read_csv('D:/PROJET PYTHON/tweets_train_2020.csv')
-model = make_pipeline(TfidfVectorizer(stop_words="english",ngram_range=(1,3)), MultinomialNB())
-
-model.fit(train2020['text'], train2020['label'])
-
-Classif_Bayes_Custom=model.predict(election_2020_tweets["real_clean_text"])
-predicted_proba=model.predict_proba(election_2020_tweets["real_clean_text"])
-gap=abs(predicted_proba[:,1]-predicted_proba[:,0])
-
-Classif_Bayes_Custom[gap<=0.2]="Neutral"
-#takes a few seconds/minutes
-election_2020_tweets['Classif_Bayes_Binary']=Classif_Bayes_Custom
-
-election_2020_tweets['Classif_Bayes_Binary'].value_counts()
-#2,5M tweets (67% of all tweets) remaining unclassified
-
-election_2020_tweets.to_csv("D:/PROJET PYTHON/2020cleantweets/NLP_2020_Classified_Tweets.csv")
 
 #%% Using BERT to improve sentiment analysis
+text = train2016['clean_text'].values
+labels = train2016['label'].values
 
-train_path = r'D:\PROJET PYTHON\tweets_train_2020.json'
+from transformers import BertTokenizer
 
-#train_path = r'D:\PROJET PYTHON\tweets_train_2016.json'
-val_path = r'D:\PROJET PYTHON\tweets_test_2020.json'
-test_path = r'D:\PROJET PYTHON\tweets_test_2020.json'
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 
-#same set for validation and test (we will conduct further testing on the full 74000 already classified tweet)
+input_ids = []
 
-device = 'cpu' #set to cpu 
+# For every sentence...
+for sent in text:
+    # `encode` will:
+    #   (1) Tokenize the sentence.
+    #   (2) Prepend the `[CLS]` token to the start.
+    #   (3) Append the `[SEP]` token to the end.
+    #   (4) Map tokens to their IDs.
+    encoded_sent = tokenizer.encode(
+                        sent,                      # Sentence to encode.
+                        add_special_tokens = True, # Add '[CLS]' and '[SEP]'
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-bert = AutoModel.from_pretrained("bert-base-uncased").to(device)
+                        # This function also supports truncation and conversion
+                        # to pytorch tensors, but we need to do padding, so we
+                        # can't use these features :( .
+                        #max_length = 128,          # Truncate all sentences.
+                        #return_tensors = 'pt',     # Return pytorch tensors.
+                   )
+    
+    # Add the encoded sentence to the list.
+    input_ids.append(encoded_sent)
 
-def feature_extraction(text):
-    x = tokenizer.encode(text)
-    with torch.no_grad():
-        x, _ = bert(torch.stack([torch.tensor(x)]).to(device))
-        return list(x[0][0].cpu().numpy())
+# Print sentence 0, now as a list of IDs.
+print('Original: ', text[0])
+print('Token IDs:', input_ids[0])
 
-mapping = {'Democrat':0, 'neutral':1, 'Republican':2}
+print('Max sentence length: ', max([len(sen) for sen in input_ids]))
+#Maximum length = 42
 
-def data_prep(dataset):
-    X = []
-    y = []
-    for element in tqdm(dataset):
-        X.append(feature_extraction(element['text']))
-        y_val = np.zeros(3)
-        y_val[mapping[element['label']]] = 1
-        y.append(y_val)
-    return np.array(X), np.array(y)
+from keras.preprocessing.sequence import pad_sequences
 
-with open(train_path, 'r') as f:
-    train = json.load(f)
-with open(val_path, 'r') as f:
-    val = json.load(f)
-with open(test_path, 'r') as f:
-    test = json.load(f)
+MAX_LEN = 64
 
-
-X_train, y_train = data_prep(train)
-X_val, y_val = data_prep(val)
-X_test, y_test = X_val , y_val
-
-class_weights = class_weight.compute_class_weight('balanced', np.unique(np.argmax(y_train, 1)), np.argmax(y_train, 1))
-es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=50)
-
-model = Sequential()
-model.add(Dense(512, activation='tanh', input_shape=(768,)))
-model.add(Dropout(0.5))
-model.add(Dense(128, activation='tanh'))
-model.add(Dropout(0.5))
-model.add(Dense(32, activation='tanh'))
-model.add(Dropout(0.5))
-model.add(Dense(3, activation='softmax'))
-
-model.summary()
-
-model.compile(loss='categorical_crossentropy',
-              optimizer=Adagrad(),
-              metrics=['accuracy'])
-
-history = model.fit(np.array(X_train), np.array(y_train),
-                    batch_size=64,
-                    epochs=500,
-                    verbose=1,
-                    validation_data=(X_val, y_val),
-                    callbacks = [es])
-
-y_true, y_pred = np.argmax(y_test, 1), np.argmax(model.predict(X_test), 1)
-#print(classification_report(y_true, y_pred, digits=3))
+# Pad our input tokens with value 0.
+# "post" indicates that we want to pad and truncate at the end of the sequence,
+# as opposed to the beginning.
+input_ids = pad_sequences(input_ids, maxlen=MAX_LEN, dtype="long", 
+                          value=0, truncating="post", padding="post")
 
 
-r_mapping = {0:'Democrat', 1:'neutral', 2:'Republican'}
+# Create attention masks
+attention_masks = []
 
-class_df=test2020
+# For each sentence...
+for sent in input_ids:
+    
+    # Create the attention mask.
+    #   - If a token ID is 0, then it's padding, set the mask to 0.
+    #   - If a token ID is > 0, then it's a real token, set the mask to 1.
+    att_mask = [int(token_id > 0) for token_id in sent]
+    
+    # Store the attention mask for this sentence.
+    attention_masks.append(att_mask)
 
-class_df["classif_BERT"]=y_pred
-class_df["classif_BERT"]=class_df["classif_BERT"].map(r_mapping)
-class_df["classif_BERT_accurate"]=(class_df["classif_BERT"]==class_df["label"])
 
-class_df["classif_BERT"].value_counts()
-class_df["label"].value_counts()
-cross_accuracy_stats=pd.crosstab(class_df["label"],class_df["classif_BERT_accurate"])
-cross_accuracy_stats["accuracy"]=cross_accuracy_stats[True]/(cross_accuracy_stats[True]+cross_accuracy_stats[False]) 
-cross_accuracy_stats
-#Errors are equally reparted (2016)
-#Erros are not equally reparted, overclassification in the democrat label (2020 with 2016 train file)
-#Erros are not equally reparted, overclassification in the democrat label (2020)
 
-class_df["classif_BERT_accurate"].value_counts()
-#61.15% accuracy (2016)
-#52.6% accuracy (2020 with 2016 train file)
-#59.45% accuracy (2020)
+# Use train_test_split to split our data into train and validation sets for
+# training
+from sklearn.model_selection import train_test_split
+
+# Use 90% for training and 10% for validation.
+train_inputs, validation_inputs, train_labels, validation_labels = train_test_split(input_ids, labels, 
+                                                            random_state=2018, test_size=0.1)
+# Do the same for the masks.
+train_masks, validation_masks, _, _ = train_test_split(attention_masks, labels,
+                                             random_state=2018, test_size=0.1)
+
+mapping={"Democrat":0,"Republican":1}
+
+train_labels=np.array(pd.Series(train_labels).map(mapping))
+validation_labels=np.array(pd.Series(validation_labels).map(mapping))
+
+import torch
+# Convert all inputs and labels into torch tensors, the required datatype 
+# for our model.
+train_inputs = torch.tensor(train_inputs)
+validation_inputs = torch.tensor(validation_inputs)
+
+train_labels = torch.tensor(train_labels)
+validation_labels = torch.tensor(validation_labels)
+
+train_masks = torch.tensor(train_masks)
+validation_masks = torch.tensor(validation_masks)
+
+
+from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
+
+# The DataLoader needs to know our batch size for training, so we specify it 
+# here.
+# For fine-tuning BERT on a specific task, the authors recommend a batch size of
+# 16 or 32.
+
+batch_size = 32
+
+# Create the DataLoader for our training set.
+train_data = TensorDataset(train_inputs, train_masks, train_labels)
+train_sampler = RandomSampler(train_data)
+train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=batch_size)
+
+# Create the DataLoader for our validation set.
+validation_data = TensorDataset(validation_inputs, validation_masks, validation_labels)
+validation_sampler = SequentialSampler(validation_data)
+validation_dataloader = DataLoader(validation_data, sampler=validation_sampler, batch_size=batch_size)
+
+from transformers import BertForSequenceClassification, AdamW, BertConfig
+
+# Load BertForSequenceClassification, the pretrained BERT model with a single 
+# linear classification layer on top. 
+model = BertForSequenceClassification.from_pretrained(
+    "bert-base-uncased", # Use the 12-layer BERT model, with an uncased vocab.
+    num_labels = 2, # The number of output labels--2 for binary classification.
+                    # You can increase this for multi-class tasks.   
+    output_attentions = False, # Whether the model returns attentions weights.
+    output_hidden_states = False, # Whether the model returns all hidden-states.
+)
+
+# Tell pytorch to run this model on the GPU (no GPU here, use CPU).
+model.cpu()
+
+params = list(model.named_parameters())
+
+print('The BERT model has {:} different named parameters.\n'.format(len(params)))
+
+print('==== Embedding Layer ====\n')
+
+for p in params[0:5]:
+    print("{:<55} {:>12}".format(p[0], str(tuple(p[1].size()))))
+
+print('\n==== First Transformer ====\n')
+
+for p in params[5:21]:
+    print("{:<55} {:>12}".format(p[0], str(tuple(p[1].size()))))
+
+print('\n==== Output Layer ====\n')
+
+for p in params[-4:]:
+    print("{:<55} {:>12}".format(p[0], str(tuple(p[1].size()))))
+    
+    
+optimizer = AdamW(model.parameters(),
+                  lr = 2e-5, # args.learning_rate - default is 5e-5, our notebook had 2e-5
+                  eps = 1e-8 # args.adam_epsilon  - default is 1e-8.
+                )
+
+
+from transformers import get_linear_schedule_with_warmup
+
+# Number of training epochs (authors recommend between 2 and 4)
+epochs = 4
+
+# Total number of training steps is number of batches * number of epochs.
+total_steps = len(train_dataloader) * epochs
+
+# Create the learning rate scheduler.
+scheduler = get_linear_schedule_with_warmup(optimizer, 
+                                            num_warmup_steps = 0, # Default value in run_glue.py
+                                            num_training_steps = total_steps)
+
+import numpy as np
+
+# Function to calculate the accuracy of our predictions vs labels
+def flat_accuracy(preds, labels):
+    pred_flat = np.argmax(preds, axis=1).flatten()
+    labels_flat = labels.flatten()
+    return np.sum(pred_flat == labels_flat) / len(labels_flat)
+
+
+#Format the time display
+import time
+import datetime
+
+def format_time(elapsed):
+    '''
+    Takes a time in seconds and returns a string hh:mm:ss
+    '''
+    # Round to the nearest second.
+    elapsed_rounded = int(round((elapsed)))
+    
+    # Format as hh:mm:ss
+    return str(datetime.timedelta(seconds=elapsed_rounded))
+
+import random
+device="cpu"
+# This training code is based on the `run_glue.py` script here:
+# https://github.com/huggingface/transformers/blob/5bfcd0485ece086ebcbed2d008813037968a9e58/examples/run_glue.py#L128
+
+
+# Set the seed value all over the place to make this reproducible.
+# seed_val = 42
+
+# random.seed(seed_val)
+# np.random.seed(seed_val)
+# torch.manual_seed(seed_val)
+# torch.cuda.manual_seed_all(seed_val)
+
+# Store the average loss after each epoch so we can plot them.
+loss_values = []
+
+# For each epoch...
+for epoch_i in range(0, epochs):
+    
+    # ========================================
+    #               Training
+    # ========================================
+    
+    # Perform one full pass over the training set.
+
+    print("")
+    print('======== Epoch {:} / {:} ========'.format(epoch_i + 1, epochs))
+    print('Training...')
+
+    # Measure how long the training epoch takes.
+    t0 = time.time()
+
+    # Reset the total loss for this epoch.
+    total_loss = 0
+
+    # Put the model into training mode. Don't be mislead--the call to 
+    # `train` just changes the *mode*, it doesn't *perform* the training.
+    # `dropout` and `batchnorm` layers behave differently during training
+    # vs. test (source: https://stackoverflow.com/questions/51433378/what-does-model-train-do-in-pytorch)
+    model.train()
+
+    # For each batch of training data...
+    for step, batch in enumerate(train_dataloader):
+
+        # Progress update every 40 batches.
+        if step % 40 == 0 and not step == 0:
+            # Calculate elapsed time in minutes.
+            elapsed = format_time(time.time() - t0)
+            
+            # Report progress.
+            print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(step, len(train_dataloader), elapsed))
+
+        # Unpack this training batch from our dataloader. 
+        #
+        # As we unpack the batch, we'll also copy each tensor to the GPU using the 
+        # `to` method.
+        #
+        # `batch` contains three pytorch tensors:
+        #   [0]: input ids 
+        #   [1]: attention masks
+        #   [2]: labels 
+        b_input_ids = batch[0].to(device).long()
+        b_input_mask = batch[1].to(device).long()
+        b_labels = batch[2].to(device).long()
+
+        # Always clear any previously calculated gradients before performing a
+        # backward pass. PyTorch doesn't do this automatically because 
+        # accumulating the gradients is "convenient while training RNNs". 
+        # (source: https://stackoverflow.com/questions/48001598/why-do-we-need-to-call-zero-grad-in-pytorch)
+        model.zero_grad()        
+
+        # Perform a forward pass (evaluate the model on this training batch).
+        # This will return the loss (rather than the model output) because we
+        # have provided the `labels`.
+        # The documentation for this `model` function is here: 
+        # https://huggingface.co/transformers/v2.2.0/model_doc/bert.html#transformers.BertForSequenceClassification
+        outputs = model(b_input_ids, 
+                    token_type_ids=None, 
+                    attention_mask=b_input_mask, 
+                    labels=b_labels)
+        
+        # The call to `model` always returns a tuple, so we need to pull the 
+        # loss value out of the tuple.
+        loss = outputs[0]
+
+        # Accumulate the training loss over all of the batches so that we can
+        # calculate the average loss at the end. `loss` is a Tensor containing a
+        # single value; the `.item()` function just returns the Python value 
+        # from the tensor.
+        total_loss += loss.item()
+
+        # Perform a backward pass to calculate the gradients.
+        loss.backward()
+
+        # Clip the norm of the gradients to 1.0.
+        # This is to help prevent the "exploding gradients" problem.
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+        # Update parameters and take a step using the computed gradient.
+        # The optimizer dictates the "update rule"--how the parameters are
+        # modified based on their gradients, the learning rate, etc.
+        optimizer.step()
+
+        # Update the learning rate.
+        scheduler.step()
+
+    # Calculate the average loss over the training data.
+    avg_train_loss = total_loss / len(train_dataloader)            
+    
+    # Store the loss value for plotting the learning curve.
+    loss_values.append(avg_train_loss)
+
+    print("")
+    print("  Average training loss: {0:.2f}".format(avg_train_loss))
+    print("  Training epcoh took: {:}".format(format_time(time.time() - t0)))
+        
+    # ========================================
+    #               Validation
+    # ========================================
+    # After the completion of each training epoch, measure our performance on
+    # our validation set.
+
+    print("")
+    print("Running Validation...")
+
+    t0 = time.time()
+
+    # Put the model in evaluation mode--the dropout layers behave differently
+    # during evaluation.
+    model.eval()
+
+    # Tracking variables 
+    eval_loss, eval_accuracy = 0, 0
+    nb_eval_steps, nb_eval_examples = 0, 0
+
+    # Evaluate data for one epoch
+    for batch in validation_dataloader:
+        
+        b_input_ids = batch[0].to(device).long()
+        b_input_mask = batch[1].to(device).long()
+        b_labels = batch[2].to(device).long()
+        
+        # # Add batch to GPU
+        # batch = tuple(t.to(device) for t in batch)
+        
+        # # Unpack the inputs from our dataloader
+        # b_input_ids, b_input_mask, b_labels = batch
+        
+        # Telling the model not to compute or store gradients, saving memory and
+        # speeding up validation
+        with torch.no_grad():        
+
+            # Forward pass, calculate logit predictions.
+            # This will return the logits rather than the loss because we have
+            # not provided labels.
+            # token_type_ids is the same as the "segment ids", which 
+            # differentiates sentence 1 and 2 in 2-sentence tasks.
+            # The documentation for this `model` function is here: 
+            # https://huggingface.co/transformers/v2.2.0/model_doc/bert.html#transformers.BertForSequenceClassification
+            outputs = model(b_input_ids, 
+                            token_type_ids=None, 
+                            attention_mask=b_input_mask)
+        
+        # Get the "logits" output by the model. The "logits" are the output
+        # values prior to applying an activation function like the softmax.
+        logits = outputs[0]
+
+        # Move logits and labels to CPU
+        logits = logits.detach().cpu().numpy()
+        label_ids = b_labels.to('cpu').numpy()
+        
+        # Calculate the accuracy for this batch of test sentences.
+        tmp_eval_accuracy = flat_accuracy(logits, label_ids)
+        
+        # Accumulate the total accuracy.
+        eval_accuracy += tmp_eval_accuracy
+
+        # Track the number of batches
+        nb_eval_steps += 1
+
+    # Report the final accuracy for this validation run.
+    print("  Accuracy: {0:.2f}".format(eval_accuracy/nb_eval_steps))
+    print("  Validation took: {:}".format(format_time(time.time() - t0)))
+
+print("")
+print("Training complete!")
+
+
 
 
 #%% With BERTweet
 
-train_path = r'D:\PROJET PYTHON\tweets_train_2016.json'
-val_path = r'D:\PROJET PYTHON\tweets_test_2020.json'
-test_path = r'D:\PROJET PYTHON\tweets_test_2020.json'
-
-device = 'cpu' #set to cpu 
-
-tokenizer = AutoTokenizer.from_pretrained("vinai/bertweet-base")
-bert = AutoModel.from_pretrained("vinai/bertweet-base").to(device)
-
-def feature_extraction(text):
-    x = tokenizer.encode(text)
-    #print(x)
-    #print(x.shape)
-    with torch.no_grad():
-        x, _ = bert(torch.stack([torch.tensor(x)]).to(device))
-        return list(x[0][0].cpu().numpy())
-
-mapping = {'Democrat':0, 'neutral':1, 'Republican':2}
-
-def data_prep(dataset):
-    X = []
-    y = []
-    for element in tqdm(dataset):
-        X.append(feature_extraction(element['text']))
-        y_val = np.zeros(3)
-        y_val[mapping[element['label']]] = 1
-        y.append(y_val)
-    return np.array(X), np.array(y)
-
-with open(train_path, 'r') as f:
-    train = json.load(f)
-with open(val_path, 'r') as f:
-    val = json.load(f)
-with open(test_path, 'r') as f:
-    test = json.load(f)
-
-
-X_train, y_train = data_prep(train)
-X_val, y_val = data_prep(val)
-X_test, y_test = X_val, y_val
-
-class_weights = class_weight.compute_class_weight('balanced', np.unique(np.argmax(y_train, 1)), np.argmax(y_train, 1))
-es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=50)
-
-model = Sequential()
-model.add(Dense(512, activation='tanh', input_shape=(768,)))
-model.add(Dropout(0.5))
-model.add(Dense(128, activation='tanh'))
-model.add(Dropout(0.5))
-model.add(Dense(32, activation='tanh'))
-model.add(Dropout(0.5))
-model.add(Dense(3, activation='softmax'))
-
-model.summary()
-
-model.compile(loss='categorical_crossentropy',
-              optimizer=Adagrad(),
-              metrics=['accuracy'])
-
-history = model.fit(np.array(X_train), np.array(y_train),
-                    batch_size=64,
-                    epochs=500,
-                    verbose=1,
-                    validation_data=(X_val, y_val),
-                    callbacks = [es])
-
-y_true, y_pred = np.argmax(y_test, 1), np.argmax(model.predict(X_test), 1)
-#print(classification_report(y_true, y_pred, digits=3))
-
-
-r_mapping = {0:'Democrat', 1:'neutral', 2:'Republican'}
-
-class_df=test2020
-
-class_df["classif_BERTweet"]=y_pred
-class_df["classif_BERTweet"]=class_df["classif_BERTweet"].map(r_mapping)
-class_df["classif_BERTweet_accurate"]=(class_df["classif_BERTweet"]==class_df["label"])
-
-class_df["classif_BERTweet"].value_counts()
-class_df["label"].value_counts()
-cross_accuracy_stats=pd.crosstab(class_df["label"],class_df["classif_BERTweet_accurate"])
-cross_accuracy_stats["accuracy"]=cross_accuracy_stats[True]/(cross_accuracy_stats[True]+cross_accuracy_stats[False]) 
-cross_accuracy_stats
-#Errors are unequally reparted, overclassification in the republican label (2016)
-#Errors are unequally reparted, overclassification in the democrat label (2020 with train 2016)
-#Errors are equally reparted (2020)
-
-class_df["classif_BERTweet_accurate"].value_counts()
-#64.45% accuracy (2016)
-#52.90% accuracy (2020 with train 2016)
-#61.40% accuracy (2020)

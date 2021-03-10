@@ -25,12 +25,13 @@ from textblob import TextBlob
 from sklearn.model_selection import train_test_split
 import random
 
+path='D:/US_Election_Tweets_local'
+
 #%%Creating the 2016 Train & Test sets
 ####################### 2016 ###########################
-#%% Import datas
+#%% Collecting datas
 
-path_clean='D:/PROJET PYTHON/cleantweets'
-path_plot='D:/PROJET PYTHON/figs'
+path_clean=path+'/2016cleantweets'
 
 filenames=[]
 for i in range(0,600):
@@ -45,8 +46,6 @@ def getMaxFile():
             return(i-1)
             break
 
-#%% FILTER
-
 def FilterTweets(tweets,include_rt=True,include_quote=True,include_reply=True):
     n_tweets=tweets
     if include_rt==False:
@@ -58,8 +57,6 @@ def FilterTweets(tweets,include_rt=True,include_quote=True,include_reply=True):
     return(n_tweets)
 
 
-#%% DATA
-#Settings
 include_rt=False
 include_quote=False
 include_reply=False
@@ -80,24 +77,6 @@ election_2016_tweets=election_2016_tweets.append(election_temp)
 election_2016_tweets.index=pd.RangeIndex(0,len(election_2016_tweets))
 
 
-#%% CLEAN TEXT
-
-def cleanRealText(text):
-    text=text.lower()
-    text=re.sub('https[^\s]*',"",text)
-    text=re.sub('http[^\s]*',"",text)
-
-    text=re.sub('#[^\s]*',"",text)
-    
-    text=re.sub('&amp',"and",text)
-    
-    text=re.sub('[^a-zA-Z0-9,:;/$.-]'," ",text)
-    
-    return(text)
-
-election_2016_tweets["real_clean_text"]=election_2016_tweets["real_text"].apply(cleanRealText)
-
-#%% add party
 def ProDemCode(x):
     if x==True:
         return(1000) #pro_dem
@@ -128,56 +107,72 @@ prcode=prdemcode+prepcode
 pro_hastags=prcode.apply(proWhat)
 election_2016_tweets["party"]=pro_hastags
 
-#%% Selection
+#%% Cleaning the text : functions
+
+def cleanRealText(text):
+    text=text.lower()
+    text=re.sub('https[^\s]*',"",text)
+    text=re.sub('http[^\s]*',"",text)
+
+    text=re.sub('#[^\s]*',"",text)
+    
+    text=re.sub('&amp',"and",text)
+    
+    text=re.sub('[^a-zA-Z0-9,:;/$.-]'," ",text)
+    
+    return(text)
+
+def cleanHastags(text):
+    text=re.sub('#[^\s]*',"",text)   
+    return(text)
+#%% Cleaning the text
+
+election_2016_tweets["real_clean_text"]=election_2016_tweets["real_text"].apply(cleanRealText)
+election_2016_tweets["real_text"]=election_2016_tweets["real_text"].apply(cleanHastags)
+
+#%% Selection and export
 
 class_tweets=election_2016_tweets[election_2016_tweets["party"]!="None"]
 class_tweets=class_tweets[class_tweets["party"]!="Both"]
 
-#The model cannot be fitted on every tweets, we will randomly select 1000 democrat tweets and 1000 republican tweets
-#Equalize the weight
+n_tweets_train=2000 #per category
+#The model cannot be fitted on every tweets, we will randomly select 2000 democrat tweets and 2000 republican tweets
+
 class_tweets_dem=class_tweets[class_tweets["party"]=="Democrat"]
-selectindex_dem=random.sample([i for i in range(1,len(class_tweets_dem))],1000)
+selectindex_dem=random.sample([i for i in range(1,len(class_tweets_dem))],n_tweets_train)
 class_tweets_dem=class_tweets_dem.iloc[selectindex_dem,:]
 
 class_tweets_rep=class_tweets[class_tweets["party"]=="Republican"]
-selectindex_rep=random.sample([i for i in range(1,len(class_tweets_rep))],1000)
+selectindex_rep=random.sample([i for i in range(1,len(class_tweets_rep))],n_tweets_train)
 class_tweets_rep=class_tweets_rep.iloc[selectindex_rep,:]
 
 class_tweets=class_tweets_dem.append(class_tweets_rep)
 
-#%% Export
-
-class_tweets=class_tweets[["real_clean_text","party","mentions_dem",'mentions_rep']]
-
-#tweets_train_x,tweets_test_x,tweets_train_y,tweets_test_y=train_test_split(class_tweets["real_clean_text"],class_tweets["party"],test_size=0.2,random_state=1)
-
-#tweets_train_2020={"text":tweets_train_x,"label":tweets_train_y}
-#tweets_train_2020=pd.concat(tweets_train_2020,axis=1)
-
-#tweets_test_2020={"text":tweets_test_x,"label":tweets_test_y}
-#tweets_test_2020=pd.concat(tweets_test_2020,axis=1)
-class_tweets.columns=["text","label","mentions_dem",'mentions_rep']
-
+#train
+class_tweets=class_tweets[["real_text","real_clean_text","party","mentions_dem",'mentions_rep']]
+class_tweets.columns=["text","clean_text","label","mentions_dem",'mentions_rep']
 tweets_train_2016=class_tweets
 
+#test
+n_tweets_train=2000 #total test
 class_tweets=election_2016_tweets[election_2016_tweets["party"]!="None"]
 class_tweets=class_tweets[class_tweets["party"]!="Both"]
-selectindex=random.sample([i for i in range(1,len(class_tweets))],2000)
+selectindex=random.sample([i for i in range(1,len(class_tweets))],n_tweets_train)
 tweets_test_2016=class_tweets.iloc[selectindex,:]
-tweets_test_2016=tweets_test_2016[["real_clean_text","party","mentions_dem",'mentions_rep']]
-tweets_test_2016.columns=["text","label","mentions_dem",'mentions_rep']
+tweets_test_2016=tweets_test_2016[["real_text","real_clean_text","party","mentions_dem",'mentions_rep']]
+tweets_test_2016.columns=["text","clean_text","label","mentions_dem",'mentions_rep']
 
-
-tweets_train_2016.to_csv('D:/PROJET PYTHON/tweets_train_2016.csv',index=False)
-tweets_test_2016.to_csv('D:/PROJET PYTHON/tweets_test_2016.csv',index=False)
-
-tweets_train_2016.to_json('D:/PROJET PYTHON/tweets_train_2016.json',orient="records")
-tweets_test_2016.to_json('D:/PROJET PYTHON/tweets_test_2016.json',orient="records")
-
+#export
+path_export=path+"/NLP_HastagsLabel"
+tweets_train_2016.to_csv(path_export+'/tweets_train_2016.csv',index=False)
+tweets_test_2016.to_csv(path_export+'/tweets_test_2016.csv',index=False)
+tweets_train_2016.to_json(path_export+'/tweets_train_2016.json')
+tweets_test_2016.to_json(path_export+'/tweets_test_2016.json')
 
 #%% Creating 2020 test and train sets
 ####################### 2020 ###########################
-path_clean='D:/PROJET PYTHON/2020cleantweets'
+#%% Collecting datas
+path_clean=path+'/2020cleantweets'
 
 include_rt=False
 include_quote=False
@@ -198,25 +193,6 @@ for i in range(1,592):
 election_2020_tweets=election_2020_tweets.append(election_temp)
 election_2020_tweets.index=pd.RangeIndex(0,len(election_2020_tweets))
 
-
-#%% CLEAN TEXT
-
-def cleanRealText(text):
-    text=text.lower()
-    text=re.sub('https[^\s]*',"",text)
-    text=re.sub('http[^\s]*',"",text)
-
-    text=re.sub('#[^\s]*',"",text)
-    
-    text=re.sub('&amp',"and",text)
-    
-    text=re.sub('[^a-zA-Z0-9,:;/$.-]'," ",text)
-    
-    return(text)
-
-election_2020_tweets["real_clean_text"]=election_2020_tweets["real_text"].apply(cleanRealText)
-
-#%% add party
 def ProDemCode(x):
     if x==True:
         return(1000) #pro_dem
@@ -247,47 +223,44 @@ prcode=prdemcode+prepcode
 pro_hastags=prcode.apply(proWhat)
 election_2020_tweets["party"]=pro_hastags
 
-#%% Selection
+#%% Cleaning the text
 
+election_2020_tweets["real_clean_text"]=election_2020_tweets["real_text"].apply(cleanRealText)
+election_2020_tweets["real_text"]=election_2020_tweets["real_text"].apply(cleanHastags)
+
+#%% Selection and export
 class_tweets=election_2020_tweets[election_2020_tweets["party"]!="None"]
 class_tweets=class_tweets[class_tweets["party"]!="Both"]
 
-#The model cannot be fitted on every tweets, we will randomly select 1000 democrat tweets and 1000 republican tweets
-#Equalize the weight
+n_tweets_train=2000 #per category
+#The model cannot be fitted on every tweets, we will randomly select 2000 democrat tweets and 2000 republican tweets
+
+#train
 class_tweets_dem=class_tweets[class_tweets["party"]=="Democrat"]
-selectindex_dem=random.sample([i for i in range(1,len(class_tweets_dem))],1000)
+selectindex_dem=random.sample([i for i in range(1,len(class_tweets_dem))],n_tweets_train)
 class_tweets_dem=class_tweets_dem.iloc[selectindex_dem,:]
 
 class_tweets_rep=class_tweets[class_tweets["party"]=="Republican"]
-selectindex_rep=random.sample([i for i in range(1,len(class_tweets_rep))],1000)
+selectindex_rep=random.sample([i for i in range(1,len(class_tweets_rep))],n_tweets_train)
 class_tweets_rep=class_tweets_rep.iloc[selectindex_rep,:]
 
 class_tweets=class_tweets_dem.append(class_tweets_rep)
 
-#%% Export
-
-class_tweets=class_tweets[["real_clean_text","party","mentions_dem",'mentions_rep']]
-
-#tweets_train_x,tweets_test_x,tweets_train_y,tweets_test_y=train_test_split(class_tweets["real_clean_text"],class_tweets["party"],test_size=0.2,random_state=1)
-
-#tweets_train_2020={"text":tweets_train_x,"label":tweets_train_y}
-#tweets_train_2020=pd.concat(tweets_train_2020,axis=1)
-
-#tweets_test_2020={"text":tweets_test_x,"label":tweets_test_y}
-#tweets_test_2020=pd.concat(tweets_test_2020,axis=1)
-class_tweets.columns=["text","label","mentions_dem",'mentions_rep']
-
+class_tweets=class_tweets[["real_text","real_clean_text","party","mentions_dem",'mentions_rep']]
+class_tweets.columns=["text","clean_text","label","mentions_dem",'mentions_rep']
 tweets_train_2020=class_tweets
 
+#test
+n_tweets_test=2000 #total
 class_tweets=election_2020_tweets[election_2020_tweets["party"]!="None"]
 class_tweets=class_tweets[class_tweets["party"]!="Both"]
-selectindex=random.sample([i for i in range(1,len(class_tweets))],2000)
+selectindex=random.sample([i for i in range(1,len(class_tweets))],n_tweets_test)
 tweets_test_2020=class_tweets.iloc[selectindex,:]
-tweets_test_2020=tweets_test_2020[["real_clean_text","party","mentions_dem",'mentions_rep']]
-tweets_test_2020.columns=["text","label","mentions_dem",'mentions_rep']
+tweets_test_2020=tweets_test_2020[["real_text","real_clean_text","party","mentions_dem",'mentions_rep']]
+tweets_test_2020.columns=["text","clean_text","label","mentions_dem",'mentions_rep']
 
-tweets_train_2020.to_csv('D:/PROJET PYTHON/tweets_train_2020.csv',index=False)
-tweets_test_2020.to_csv('D:/PROJET PYTHON/tweets_test_2020.csv',index=False)
+#export
+path_export=path+"/NLP_HastagsLabel"
+tweets_train_2020.to_csv(path_export+'/tweets_train_2020.csv',index=False)
+tweets_test_2020.to_csv(path_export+'/tweets_test_2020.csv',index=False)
 
-tweets_train_2020.to_json('D:/PROJET PYTHON/tweets_train_2020.json',orient="records")
-tweets_test_2020.to_json('D:/PROJET PYTHON/tweets_test_2020.json',orient="records")
