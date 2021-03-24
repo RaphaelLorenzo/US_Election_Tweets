@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 
 ### Folders 2016cleantweets and 2020cleantweets location
-path="D:/US_Election_Tweets"
+path="D:/US_Election_Tweets_Local"
 
 ###
 class tweets_loader:
@@ -53,6 +53,64 @@ class tweets_loader:
         
         return path_clean
     
+        
+    def ProDemCode(self,x):
+        if x==True:
+            return(1000) #pro_dem
+        else:
+            return(0) #not_pro_dem
+    
+    
+    def ProRepCode(self,x):
+        if x==True:
+            return(2000) #pro_rep
+        else:
+            return(0) #not_pro_rep
+    
+    
+    def proWhat(self,x):
+        if x==1000:
+            return("Democrat")
+        elif x==2000:
+           return("Republican")
+        elif x==3000:
+            return("Both")
+        elif x==0:
+            return("None")
+        
+    def MentionDemCode(self,x):
+        if len(x)>2:
+            return(100) #mentions_dem
+        else:
+            return(0) #not_mentions_dem
+        
+    def MentionRepCode(self,x):
+        if len(x)>2:
+            return(200) #mentions_rep
+        else:
+            return(0) #not_mentions_rep
+        
+    def cross_pro_mention(self,x):
+        if x==1100:
+            return("MentionsDem")
+        elif x==1300:
+            return("MentionsBoth")
+        elif x==1200:
+            return("MentionsRep")
+        elif x==2200:
+            return("MentionsRep")
+        elif x==2300:
+            return("MentionsBoth")  
+        elif x==2100:
+            return("MentionsDem")
+        elif x==1000:
+            return("MentionsNone")   
+        elif x==2000:
+            return("MentionsNone")
+        else:
+            return("None")    
+    
+    
     def make_df(self):
         number_of_files = len(os.listdir(self.GetPath()))
         tweets=pd.read_csv(self.GetPath()+'/cleantweets_0.csv',sep=";")
@@ -65,15 +123,46 @@ class tweets_loader:
             #end=time.time()
             #print("Added tweet file number : "+str(i)+" in "+str(end-start)+" seconds")
         
+        print("Merging loaded tweets...")
         tweets=tweets.append(election_temp)
         tweets.index=pd.RangeIndex(0,len(tweets))
+        print("Loaded tweets merged")
         
-        if self.classif_type=="hastags":
-            tweets["party"]="None"
-            tweets.loc[tweets["pro_dem"]==True,"party"]="Democrat"
-            tweets.loc[tweets["pro_rep"]==True,"party"]="Republican"
-            tweets.loc[(tweets["pro_dem"]==True)&(tweets["pro_rep"]==True),"party"]="Both"
+        # This formulation (without the above functions) is cleaner but slower for big datasets
+        # tweets["mentions"]="MentionsNone"
+        # tweets.loc[tweets["mentions_rep"].apply(lambda x: True if len(x)>2 else False),"mentions"]="MentionsRep"
+        # tweets.loc[tweets["mentions_dem"].apply(lambda x: True if len(x)>2 else False),"mentions"]="MentionsDem"
+        # tweets.loc[(tweets["mentions_rep"].apply(lambda x: True if len(x)>2 else False))&(tweets["mentions_dem"].apply(lambda x: True if len(x)>2 else False)),"mentions"]="MentionsBoth"
+        
+        print("Adding mentions classification...")
 
+        mendemcode=tweets.loc[:,'mentions_dem'].apply(self.MentionDemCode)
+        menrepcode=tweets.loc[:,'mentions_rep'].apply(self.MentionRepCode)
+        mencode=menrepcode+mendemcode
+        prdemcode=tweets.loc[:,'pro_dem'].apply(self.ProDemCode)    
+        prepcode=tweets.loc[:,'pro_rep'].apply(self.ProRepCode)    
+        prcode=prdemcode+prepcode
+        crossprmen=mencode+prcode        
+        pro_mention_cross_hastags=crossprmen.apply(self.cross_pro_mention)
+        tweets["mentions"]=pro_mention_cross_hastags
+
+        print("Mentions classification added")
+
+        if self.classif_type=="hastags":
+            print("Adding hastags based classification...")
+
+            tweets["party"]="None"
+            
+            # This formulation (without the above functions) is cleaner but slower for big datasets
+            # tweets.loc[tweets["pro_dem"]==True,"party"]="Democrat"
+            # tweets.loc[tweets["pro_rep"]==True,"party"]="Republican"
+            # tweets.loc[(tweets["pro_dem"]==True)&(tweets["pro_rep"]==True),"party"]="Both"
+            
+            prodem_code=tweets["pro_dem"].apply(self.ProDemCode)
+            prorep_code=tweets["pro_rep"].apply(self.ProRepCode)
+            tweets["party"]=prodem_code+prorep_code
+            tweets["party"].apply(self.proWhat)
+            
             print("Hastags based classification added")
         
         return tweets   
