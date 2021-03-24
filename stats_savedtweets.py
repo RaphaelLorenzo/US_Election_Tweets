@@ -23,62 +23,23 @@ import random
 import matplotlib.lines as mlines
 from textblob import TextBlob
 
+path='D:/US_Election_Tweets'
 
-path_clean='D:/PROJET PYTHON/cleantweets'
-path_plot='D:/PROJET PYTHON/figs'
+#Import the Utils functions
+import sys
+sys.path.insert(1, path)
+from Utils import tweets_loader
 
-results_2016=pd.read_csv("D:/PROJET PYTHON/Ressources/2016Election.csv")
+results_2016=pd.read_csv(path+"/Ressources/2016Election.csv")
 results_2016["State"]=results_2016["State"].str.lower()
 results_2016['State'] = results_2016['State'].replace(['washington dc'],'district of columbia')
 results_2016=results_2016.rename(columns = {'State':'state'})
 
-filenames=[]
-for i in range(0,500):
-    filenames.append("cleantweets_"+str(i)+".csv")
 
-def getMaxFile():
-    for i,name in enumerate(filenames):
-        if os.path.isfile(path_clean+'/'+name):
-            print(name+ " exists")
-        else:
-            print(name+ " does not exists")
-            return(i-1)
-            break
+#%% Load tweets
 
-#%% FILTER
-
-def FilterTweets(tweets,include_rt=True,include_quote=True,include_reply=True):
-    n_tweets=tweets
-    if include_rt==False:
-        n_tweets=n_tweets[tweets["tweet_type"]!="Retweet"]
-    if include_quote==False:
-        n_tweets=n_tweets[tweets["tweet_type"]!="Quote"]
-    if include_reply==False:
-        n_tweets=n_tweets[tweets["tweet_type"]!="Reply"]
-    return(n_tweets)
-
-
-#%% DATA
-#Settings
-include_rt=False
-include_quote=True
-include_reply=True
-#
-election_2016_tweets=pd.read_csv(path_clean+'/cleantweets_0.csv',sep=";")
-election_2016_tweets=FilterTweets(election_2016_tweets,include_rt=include_rt,include_quote=include_quote,include_reply=include_reply)
-election_temp=[]
-#for i in range(1,int(getMaxFile())+1):
-for i in range(1,30):
-
-    start=time.time()
-    tempfile=pd.read_csv(path_clean+"/cleantweets_"+str(i)+".csv",sep=";")
-    election_temp.append(FilterTweets(tempfile,include_rt=include_reply,include_quote=include_quote,include_reply=include_reply))
-    end=time.time()
-    print("Added tweet file number : "+str(i)+" in "+str(end-start)+" seconds")
-
-election_2016_tweets=election_2016_tweets.append(election_temp)
-election_2016_tweets.index=pd.RangeIndex(0,len(election_2016_tweets))
-    
+loader=tweets_loader(year=2020,include_rt=False,include_quote=True,include_reply=True)
+tweets=loader.make_df()
 
 #%% Histogrammes
 plt.style.use('seaborn-darkgrid')
@@ -94,12 +55,8 @@ def makeHistogram(tweets,what,limit_low=0,limit_high=1000,nbins=10):
         plt.pyplot.hist(tweets["retweet_count"],range=(limit_low,limit_high),bins=nbins)
         plt.pyplot.title("Répartition du nombre de retweets par tweet "+str(limit_low)+" à "+str(limit_high)+" retweets")
 
-#Répartition clairement déséquilibrée, de très gros compte influencenet vers le haut
 
-#NB Les données sont actualisées en 2020. Les tweets sont ceux qui n'ont pas été supprimés, le nombre de comptes, de suivis, de followers... est celui de 2020
-#Rien ne dit qu'il n'y ait pas un biais de tendance dans l'activité des utilisateurs entre 2016 et 2020
-
-makeHistogram(election_2016_tweets,"retweets",10,10000,nbins=100)
+makeHistogram(tweets,"retweets",10,10000,nbins=100)
 
 #%% Réponses
 
@@ -122,146 +79,86 @@ def makeMostAnswered(tweets,n_low,n_high):
     ax.set_xlabel('Reponses')
     ax.set_title('Utilisateurs suscitant le plus de réponses (du '+str(n_low+1)+'ème au '+str(n_high-1)+'ème)')
     
-makeMostAnswered(election_2016_tweets,0,11)
-makeMostAnswered(election_2016_tweets,2,21)
-
-#fig.savefig(plotpath+"/most_answered_users.pdf")
+makeMostAnswered(tweets,0,11)
+makeMostAnswered(tweets,2,21)
 
 #%% Retweetés
 
 def makeMostRetweeted(tweets,n_low,n_high):
-    unique_user_retweeted=tweets['retweeted_status_author_name'].value_counts()
-    unique_user_retweeted=pd.DataFrame(unique_user_retweeted)
-    unique_user_retweeted["id"]=unique_user_retweeted.index.values
-    unique_user_retweeted.index=pd.RangeIndex(0,len(unique_user_retweeted))
+    rt_user_count=tweets.loc[tweets["tweet_type"]!="Retweet",:].groupby("author_name")["retweet_count"].sum().sort_values(ascending=False)
+    #Does not take into account retweets themselves
     
     fig, ax = plt.pyplot.subplots()
     
     y_pos = np.arange(n_high-n_low)
     
     cmap=plt.pyplot.get_cmap("plasma")
-    ax.barh(y_pos, unique_user_retweeted["retweeted_status_author_name"][n_low:n_high], align='center',color=[cmap(i/n_high) for i in range(n_low,n_high)])
+    ax.barh(y_pos, rt_user_count[n_low:n_high], align='center',color=[cmap(i/n_high) for i in range(n_low,n_high)])
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(unique_user_retweeted["id"][n_low:n_high])
+    ax.set_yticklabels(rt_user_count.index.values[n_low:n_high])
     ax.invert_yaxis()
-    ax.set_xlabel('Retweets (nombre de RT dans la base)')
+    ax.set_xlabel('Retweets (nombre de RT cumulé)')
     ax.set_title('Utilisateurs suscitant le plus de RT (du '+str(n_low+1)+'ème au '+str(n_high-1)+'ème)')
     
-makeMostRetweeted(election_2016_tweets,0,20)
-
-#fig.savefig(plotpath+"/most_retweeted_users.pdf")
+makeMostRetweeted(tweets,0,20)
 
 
 #%% Political side
-#Political side identified by hastags
+#Political side identified by the chosen classification
 
-def ProDemCode(x):
-    if x==True:
-        return(1000) #pro_dem
-    else:
-        return(0) #not_pro_dem
-
-
-def ProRepCode(x):
-    if x==True:
-        return(2000) #pro_rep
-    else:
-        return(0) #not_pro_rep
-
-
-def proWhat(x):
-    if x==1000:
-        return("Democrat")
-    elif x==2000:
-       return("Republican")
-    elif x==3000:
-        return("Both")
-    elif x==0:
-        return("None")
-
-def MakeBarplotPro(tweets,inc_no_party=False):
-    prdemcode=tweets.loc[:,'pro_dem'].apply(ProDemCode)    
-    prepcode=tweets.loc[:,'pro_rep'].apply(ProRepCode)    
-    prcode=prdemcode+prepcode
-    pro_hastags=prcode.apply(proWhat)
-    
-    election_2016_tweets["party"]=pro_hastags
-    
-    pro_hastags=pd.Series(pro_hastags)
-    pro_hastags_count=pro_hastags.value_counts()
-    pro_hastags_count=pd.DataFrame({"count":pro_hastags_count})
-    pro_hastags_count["party"]=pro_hastags_count.index
-    pro_hastags_count.index=pd.RangeIndex(0,len(pro_hastags_count))
+def MakePartyBarplot(tweets,inc_no_party=False):
+    party_count=tweets["party"].value_counts()
+    party_count=party_count.reset_index()
+    party_count.columns=["party","count"]
     palette_party ={"Democrat": "blue", "Republican": "red", "Both": "purple", "None": "gray"}
     if inc_no_party:
-        sns.barplot(data=pro_hastags_count,x="count",y="party",palette=palette_party)
+        sns.barplot(data=party_count,x="count",y="party",palette=palette_party)
     else:
-        sns.barplot(data=pro_hastags_count.loc[1:,:],x="count",y="party",palette=palette_party)
+        sns.barplot(data=party_count.loc[party_count["party"]!="None",:],x="count",y="party",palette=palette_party)
 
-MakeBarplotPro(election_2016_tweets,inc_no_party=False)
+MakePartyBarplot(tweets,inc_no_party=False)
 
 #%% Crossing political side and mentions of democrats/republicans
-def MentionDemCode(x):
-    if len(x)>2:
-        return(100) #mentions_dem
-    else:
-        return(0) #not_mentions_dem
-    
-def MentionRepCode(x):
-    if len(x)>2:
-        return(200) #mentions_rep
-    else:
-        return(0) #not_mentions_rep
-    
-palette_party_cross_mention ={"proDem_NoMention": "blue","proDem_MentionsRep": "blue","ProDem_MentionsBoth": "blue","ProDem_MentionsDem": "blue",
-                              "proRep_MentionsRep": "red","proRep_MentionsBoth": "red","proRep_MentionsDem": "red","proRep_NoMention": "red"}
 
-def cross_pro_mention(x):
-    if x==1100:
-        return("ProDem_MentionsDem")
-    elif x==1300:
-        return("ProDem_MentionsBoth")
-    elif x==1200:
-        return("proDem_MentionsRep")
-    elif x==2200:
-        return("proRep_MentionsRep")
-    elif x==2300:
-        return("proRep_MentionsBoth")  
-    elif x==2100:
-        return("proRep_MentionsDem")
-    elif x==1000:
-        return("proDem_NoMention")   
-    elif x==2000:
-        return("proRep_NoMention")
-    else:
-        return("None")
+palette_party_cross_mention ={"Democrat_MentionsNone": "blue",
+                              "Democrat_MentionsRep": "blue",
+                              "Democrat_MentionsBoth": "blue",
+                              "Democrat_MentionsDem": "blue",
+                              "Republican_MentionsRep": "red",
+                              "Republican_MentionsBoth": "red",
+                              "Republican_MentionsDem": "red",
+                              "Republican_MentionsNone": "red"}
+
     
-def MakeBarplotCrossProMention(tweets,inc_no_party=False):    
-    mendemcode=tweets.loc[:,'mentions_dem'].apply(MentionDemCode)
-    menrepcode=tweets.loc[:,'mentions_rep'].apply(MentionRepCode)
-    mencode=menrepcode+mendemcode
-    prdemcode=tweets.loc[:,'pro_dem'].apply(ProDemCode)    
-    prepcode=tweets.loc[:,'pro_rep'].apply(ProRepCode)    
-    prcode=prdemcode+prepcode
-    crossprmen=mencode+prcode        
-    pro_mention_cross_hastags=crossprmen.apply(cross_pro_mention)
+def MakeBarplotPartyCrossMention(tweets,inc_no_party=False,normalize=False):    
+    cross_count=pd.melt(
+        frame=pd.crosstab(tweets["mentions"],tweets["party"]).reset_index(),
+        id_vars="mentions",
+        value_vars=["Both","Democrat","Republican","None"])
     
-    pro_mention_cross_hastags=pd.Series(pro_mention_cross_hastags)
-    pro_mention_cross_hastags_count=pro_mention_cross_hastags.value_counts()
-    pro_mention_cross_hastags_count=pd.DataFrame({"count":pro_mention_cross_hastags_count})
-    pro_mention_cross_hastags_count["type"]=pro_mention_cross_hastags_count.index
-    pro_mention_cross_hastags_count.index=pd.RangeIndex(0,len(pro_mention_cross_hastags_count))
-    
+    if normalize==True:
+        cross_count["value"]=cross_count.groupby('party')["value"].transform(lambda x: (x/sum(x)))
+
+    cross_count["type"]=cross_count["party"]+"_"+cross_count["mentions"]
+    cross_count=cross_count[["type","value"]]
+        
     if inc_no_party:
-        sns_plot=sns.barplot(data=pro_mention_cross_hastags_count,x="count",y="type",palette=palette_party_cross_mention)
+        sns_plot=sns.barplot(data=cross_count[cross_count["type"].isin(palette_party_cross_mention.keys())],x="value",y="type",palette=palette_party_cross_mention)
     else:
-        sns_plot=sns.barplot(data=pro_mention_cross_hastags_count.loc[1:,:],x="count",y="type",palette=palette_party_cross_mention)
+        sns_plot=sns.barplot(data=cross_count[(cross_count["type"].isin(palette_party_cross_mention.keys()))&(cross_count["type"]!="Republican_MentionsNone")&(cross_count["type"]!="Democrat_MentionsNone")],x="value",y="type",palette=palette_party_cross_mention)
 
-MakeBarplotCrossProMention(election_2016_tweets,inc_no_party=False)
+MakeBarplotPartyCrossMention(tweets,inc_no_party=False,normalize=True)
 
 
 #%% Stats geographiques
-def makeBarplotGeo(tweets,what,n_low,n_high,by_party=False,include_none=False,include_en=True,relative=False):
+def makeBarplotGeo(tweets,what,n_low,n_high,year=2016,by_party=False,include_none=False,include_en=True,relative=False):
+    if year==2016:
+        electoral_datas=results_2016
+    elif year==2020:
+        electoral_datas=results_2020
+    else:
+        return("No electoral data for this year")
+    
     if what=="country":
         unique_country=tweets["country"].value_counts()
         unique_country=pd.DataFrame(unique_country)        
@@ -349,17 +246,18 @@ def makeBarplotGeo(tweets,what,n_low,n_high,by_party=False,include_none=False,in
             sns_plot=sns.barplot(data=unique_lang[(unique_lang["party"]!="None")&(unique_lang["party"]!="Both")&((unique_lang["lang"]=="und")| (unique_lang["lang"]=="es")| (unique_lang["lang"]=="ja")| (unique_lang["lang"]=="fr")| (unique_lang["lang"]=="pt"))],x="lang_count",y="lang",hue="party",color=["blue","red"],palette=palette_party)
             
 
-makeBarplotGeo(election_2016_tweets,"country",1,20)
-makeBarplotGeo(election_2016_tweets,"state",0,20)
-makeBarplotGeo(election_2016_tweets,"state",0,10,by_party=True)
-makeBarplotGeo(election_2016_tweets,"state",0,10,by_party=True,relative="vote")
+year=2020
+makeBarplotGeo(tweets,"country",1,20,year=year)
+makeBarplotGeo(tweets,"state",0,20,year=year)
+makeBarplotGeo(tweets,"state",0,10,year=year,by_party=True)
+makeBarplotGeo(tweets,"state",0,10,year=year,by_party=True,relative="vote") #by state relative to for each party in the specific state
 
-makeBarplotGeo(election_2016_tweets,"lang",0,5,by_party=False,include_en=False)
-makeBarplotGeo(election_2016_tweets,"lang",0,5,by_party=True,include_en=True)
+makeBarplotGeo(tweets,"lang",0,5,year=year,by_party=False,include_en=False)
+makeBarplotGeo(tweets,"lang",0,5,year=year,by_party=True,include_en=True)
 
-makeBarplotGeo(election_2016_tweets,"state",0,20,relative="electoral_vote")
-makeBarplotGeo(election_2016_tweets,"state",0,20,relative="pop")
-makeBarplotGeo(election_2016_tweets,"state",0,20,relative="vote")
+makeBarplotGeo(tweets,"state",0,20,year=year,relative="electoral_vote") #Relative to electoral votes to win by state
+makeBarplotGeo(tweets,"state",0,20,year=year,relative="pop") #Relative to population by state
+makeBarplotGeo(tweets,"state",0,20,year=year,relative="vote") #Relative to turnout by state
 
 #%% Crossing tweet type and political side
 
@@ -416,7 +314,8 @@ def MakeBarplotTweetType(tweets,by_party=True,inc_no_party=False):
         plt.pyplot.xticks(x_pos, ['All'])
         plt.pyplot.legend((b1[0],b2[0],b3[0],b4[0]), ('Quote', 'Reply', 'Retweet','Tweet'))
 
-MakeBarplotTweetType(election_2016_tweets,by_party=True,inc_no_party=True)
+MakeBarplotTweetType(tweets,by_party=True,inc_no_party=True)
+MakeBarplotTweetType(tweets,by_party=True,inc_no_party=False)
 
 #%% Intensity of tweets in time
 
@@ -441,9 +340,9 @@ def MakeTweetsIntensity(tweets,period,by_party=False,include_none=True):
     else:
         plot=t.resample(period).count().plot()
 
-MakeTweetsIntensity(election_2016_tweets,period='15T',by_party=True,include_none=False)
-MakeTweetsIntensity(election_2016_tweets,period='15T',by_party=False,include_none=False)
+MakeTweetsIntensity(tweets,period='15T',by_party=True,include_none=False)
+MakeTweetsIntensity(tweets,period='15T',by_party=False,include_none=False)
 
 #%% Basic word occurences
 
-#See NLPbased_classif
+#See words_count.py
