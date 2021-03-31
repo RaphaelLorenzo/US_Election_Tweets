@@ -18,20 +18,25 @@ import random
 from tqdm import tqdm
 
 
-### Folders 2016cleantweets and 2020cleantweets location
+### Folders 2016cleantweets and 2020cleantweets location, as well as Classif folder with tweets classification
 path="D:/US_Election_Tweets_Local"
 
 ###
 class tweets_loader:
-    def __init__(self,year=2016,classif_type="hastags",include_rt=True,include_quote=True,include_reply=True):
+    def __init__(self,year=2016,classif_type="hastags",include_rt=True,include_quote=True,include_reply=True,sample_size=1):
         self.year=year
         self.classif_type=classif_type
         self.include_rt=include_rt
         self.include_quote=include_quote
         self.include_reply=include_reply
+        self.sample_size=sample_size
         
     def FilterTweets(self,tweets):
-        n_tweets=tweets
+        if self.sample_size>=1:
+            n_tweets=tweets
+        elif self.sample_size<1:
+            n_tweets=tweets.sample(frac=self.sample_size)
+            
         if self.include_rt==False:
             n_tweets=n_tweets.loc[tweets["tweet_type"]!="Retweet",:]
         if self.include_quote==False:
@@ -165,8 +170,16 @@ class tweets_loader:
             
             print("Hastags based classification added")
         
+        elif self.classif_type=="nlp":
+            print("Adding NLP based classification...")
+            print("Loading tweets classification...")
+            classif_nlp=pd.read_csv(path+"/Classif/NLPClassif_"+str(self.year)+".csv",index_col="id")
+            classif_nlp.columns=["party"]
+            
+            print("Joining tweets classification...")
+            tweets=tweets.join(classif_nlp, on="id")
+            tweets.loc[tweets["party"].isnull(),"party"]="None"
+            print("NLP based classification added")
+            
         return tweets   
-
-
-             
 
