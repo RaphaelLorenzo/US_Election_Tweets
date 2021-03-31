@@ -27,33 +27,6 @@ except:
     
 api.update_status("Hello")
 
-## 1. Importing datas : all tweets ID
-election_filter=pd.read_csv("C:/Users/rapha/Desktop/StagePython/Projet/election-filter1.txt",sep="\n",header=None)
-
-election_filter2=pd.read_csv("C:/Users/rapha/Desktop/StagePython/Projet/election-filter2.txt",sep="\n",header=None)
-election_filter=election_filter.append(election_filter2)
-
-election_filter3=pd.read_csv("C:/Users/rapha/Desktop/StagePython/Projet/election-filter3.txt",sep="\n",header=None)
-election_filter=election_filter.append(election_filter3)
-
-election_filter4=pd.read_csv("C:/Users/rapha/Desktop/StagePython/Projet/election-filter4.txt",sep="\n",header=None)
-election_filter=election_filter.append(election_filter4)
-
-election_filter5=pd.read_csv("C:/Users/rapha/Desktop/StagePython/Projet/election-filter5.txt",sep="\n",header=None)
-election_filter=election_filter.append(election_filter5)
-
-election_filter6=pd.read_csv("C:/Users/rapha/Desktop/StagePython/Projet/election-filter6.txt",sep="\n",header=None)
-election_filter=election_filter.append(election_filter6)
-
-election_filter=election_filter.sort_values(0)
-
-statustest=api.get_status(election_filter.iloc[211000000,0])
-statustest.created_at
-
-election_filter_dateok=election_filter.iloc[211000000:,:]
-
-election_filter_dateok.to_csv('C:/Users/rapha/Desktop/StagePython/Projet/election_filter_dateok.csv',sep=";",index=False)
-
 ## 2. Retrieving / hydrating tweets 
 ## 90 000 at a time, in 15 minutes, saving it in different files
 election_filter_dateok=pd.read_csv('C:/Users/rapha/Desktop/StagePython/Projet/election_filter_dateok.csv',sep=";")

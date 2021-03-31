@@ -5,15 +5,11 @@ Created on Tue Oct 20 13:51:08 2020
 @author: Administrateur
 """
 
-import tweepy
 import pandas as pd
 import numpy as np
-import matplotlib as plt
 import os.path
 import time
-import math
 import re
-import statsmodels.api as sm
 
 path='F:/PROJET PYTHON/'
 
@@ -343,53 +339,9 @@ def locate(tweets_data):
 
 ####states,country=locate(election_2016_tweets)
 
-            
-########
-election_2016_tweets_temp["real_text"]=texts
-election_2016_tweets_temp["hastags_pro_dem"]=h_dem
-election_2016_tweets_temp["hastags_pro_rep"]=h_rep
-election_2016_tweets_temp["loc_country"]=countries
-election_2016_tweets_temp["loc_state"]=states
-election_2016_tweets_temp["place_country"]=place_country
-election_2016_tweets_temp["place_state"]=place_state
-election_2016_tweets_temp["mentions_dem"]=m_dem
-election_2016_tweets_temp["mentions_rep"]=m_rep
-election_2016_tweets_temp["pro_dem"]=isprodem
-election_2016_tweets_temp["pro_rep"]=isprorep
-election_2016_tweets_temp["source_type"]=sources_t
-election_2016_tweets_temp["tweet_type"]=types
-
-
-tweets=election_2016_tweets_temp.loc[:,["tweet_type",
-                                        "id",
-                                        "created_at",
-                                        "loc_country",
-                                        "loc_state",
-                                        "place_country",   
-                                        "place_state",                                                                                
-                                        "author_id",
-                                        "author_name",
-                                        "author_realname",
-                                        "author_verified",
-                                        "author_followers",
-                                        "author_friendscount",
-                                        "author_statuscount",
-                                        "retweeted_status_author_name",
-                                        "in_reply_to_screen_name",
-                                        "real_text",
-                                        "retweet_count",
-                                        "favorite_count",
-                                        "pro_dem",
-                                        "pro_rep",
-                                        "mentions_dem",
-                                        "hastags_pro_dem",
-                                        "mentions_rep",
-                                        "hastags_pro_rep"]]
-
-
 
 def cleanUp(nfile):
-    election_2016_tweets_temp=pd.read_csv(path+"tweets/tweets_"+str(nfile)+".csv",sep=";")
+    election_2016_tweets_temp=pd.read_csv(path+"2020tweets/tweets_"+str(nfile)+".csv",sep=";")
     
     
     #Adding the new columns
@@ -465,7 +417,7 @@ def cleanUp(nfile):
     tweets.to_csv(path+"cleantweets/cleantweets_"+str(nfile)+".csv",sep=";",index=False)
     return("Success, tweets saved to cleantweets_"+str(nfile)+".csv")
 
-for i in range(448,449):
+for i in range(449):
     cleanUp(i)
     
     
