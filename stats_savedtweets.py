@@ -47,7 +47,7 @@ results_2020=results_2020.rename(columns = {'State':'state'})
 
 #%% Load tweets
 
-loader=tweets_loader(year=2016,classif_type="nlp",include_rt=False,include_quote=True,include_reply=True,sample_size=0.2) 
+loader=tweets_loader(year=2020,classif_type="nlp",include_rt=False,include_quote=True,include_reply=True,sample_size=0.1) 
 #taking a sample because of memory issue
 tweets=loader.make_df()
 

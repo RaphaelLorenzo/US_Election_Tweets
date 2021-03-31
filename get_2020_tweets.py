@@ -142,7 +142,7 @@ def createNextFile2020():
 
 
 #Lançons la création de fichiers
-for i in range(50):
+for _ in range(593):
     try:
         createNextFile2020()
         time.sleep(15*60) 
