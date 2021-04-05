@@ -6,20 +6,11 @@ Created on Sun Oct 11 18:03:33 2020
 """
 #%% IMPORTATIONS
 
-import tweepy
 import pandas as pd
 import numpy as np
 import matplotlib as plt
-import os.path
-import time
-import math
 import re
-import statsmodels.api as sm
 import seaborn as sns
-import datetime 
-from matplotlib.dates import DayLocator, HourLocator, DateFormatter, drange 
-from matplotlib import cm
-import random
 import matplotlib.lines as mlines
 from textblob import TextBlob
 import nltk
@@ -71,9 +62,9 @@ def makeHistogram(tweets,what,limit_low=0,limit_high=1000,nbins=10,save=False):
         if save!=False:
             plt.pyplot.savefig(path+"/plots/"+str(save)+'.png', dpi=300)
             
-makeHistogram(tweets,"followers",10,10000,nbins=100,save="2016_Followers")
-makeHistogram(tweets,"author_statuscount",10,10000,nbins=100,save="2016_StatusCount")
-makeHistogram(tweets,"retweets",10,10000,nbins=100,save="2016_Retweets")
+makeHistogram(tweets,"followers",10,10000,nbins=100,save="2020_Followers")
+makeHistogram(tweets,"author_statuscount",10,10000,nbins=100,save="2020_StatusCount")
+makeHistogram(tweets,"retweets",10,10000,nbins=100,save="2020_Retweets")
 
 #%% Réponses
 
@@ -103,8 +94,8 @@ def makeMostAnswered(tweets,n_low,n_high,save=False):
         plt.pyplot.tight_layout()
         plt.pyplot.savefig(path+"/plots/"+str(save)+'.png', dpi=300)
         
-makeMostAnswered(tweets,0,11,save="2016_MostAnswered")
-makeMostAnswered(tweets,2,21,save="2016_MostAnswered_Zoom")
+makeMostAnswered(tweets,0,11,save="2020_MostAnswered")
+makeMostAnswered(tweets,2,21,save="2020_MostAnswered_Zoom")
 
 #%% Retweetés
 
@@ -131,7 +122,7 @@ def makeMostRetweeted(tweets,n_low,n_high,save=False):
         plt.pyplot.tight_layout()
         plt.pyplot.savefig(path+"/plots/"+str(save)+'.png', dpi=300)
         
-makeMostRetweeted(tweets,0,20,save="2016_MostRT")
+makeMostRetweeted(tweets,0,20,save="2020_MostRT")
 
 
 #%% Political side
@@ -150,7 +141,7 @@ def MakePartyBarplot(tweets,inc_no_party=False,save=False):
     if save!=False:
         plt.pyplot.savefig(path+"/plots/"+str(save)+'.png',dpi=300)
         
-MakePartyBarplot(tweets,inc_no_party=False,save="2016_PartyBarplot_NLPClassif")
+MakePartyBarplot(tweets,inc_no_party=True,save="2016_PartyBarplot_HastagsClassif")
 
 #%% Crossing political side and mentions of democrats/republicans
 
@@ -188,6 +179,7 @@ def MakeBarplotPartyCrossMention(tweets,inc_no_party=False,normalize=False,save=
         sns.barplot(data=cross_count[(cross_count["type"].isin(palette_party_cross_mention.keys()))&(cross_count["type"]!="Republican_MentionsNone")&(cross_count["type"]!="Democrat_MentionsNone")],x="value",y="type",palette=palette_party_cross_mention)
 
     if save!=False:
+        plt.pyplot.tight_layout()
         plt.pyplot.savefig(path+"/plots/"+str(save)+'.png',dpi=300)
         
 
@@ -293,18 +285,18 @@ def makeBarplotGeo(tweets,what,n_low,n_high,year=2016,by_party=False,include_non
         plt.pyplot.tight_layout()
         plt.pyplot.savefig(path+"/plots/"+str(save)+'.png', dpi=300)            
 
-year=2016
+year=2020
 makeBarplotGeo(tweets,"country",1,20,year=year)
-makeBarplotGeo(tweets,"state",0,20,year=year,save="2016_TweetsPerState")
-makeBarplotGeo(tweets,"state",0,10,year=year,by_party=True,save="2016_TweetsPerStateByParty")
-makeBarplotGeo(tweets,"state",0,10,year=year,by_party=True,relative="vote",save="2016_TweetsPerStatePerVoteByParty") #by state relative to for each party in the specific state
+makeBarplotGeo(tweets,"state",0,20,year=year,save="2020_TweetsPerState")
+makeBarplotGeo(tweets,"state",0,10,year=year,by_party=True,save="2020_TweetsPerStateByParty")
+makeBarplotGeo(tweets,"state",0,10,year=year,by_party=True,relative="vote",save="2020_TweetsPerStatePerVoteByParty") #by state relative to for each party in the specific state
 
-makeBarplotGeo(tweets,"lang",0,5,year=year,by_party=False,include_en=False,save="2016_TweetsLang")
+makeBarplotGeo(tweets,"lang",0,5,year=year,by_party=False,include_en=False,save="2020_TweetsLang")
 makeBarplotGeo(tweets,"lang",0,5,year=year,by_party=True,include_en=True)
 
-makeBarplotGeo(tweets,"state",0,20,year=year,relative="electoral_vote",save="2016_TweetsPerEV") #Relative to electoral votes to win by state
-makeBarplotGeo(tweets,"state",0,20,year=year,relative="pop",save="2016_TweetsPerPerson") #Relative to population by state
-makeBarplotGeo(tweets,"state",0,20,year=year,relative="vote",save="2016_TweetsPerVoter") #Relative to turnout by state
+makeBarplotGeo(tweets,"state",0,20,year=year,relative="electoral_vote",save="2020_TweetsPerEV") #Relative to electoral votes to win by state
+makeBarplotGeo(tweets,"state",0,20,year=year,relative="pop",save="2020_TweetsPerPerson") #Relative to population by state
+makeBarplotGeo(tweets,"state",0,20,year=year,relative="vote",save="2020_TweetsPerVoter") #Relative to turnout by state
 
 #%% Crossing tweet type and political side
 
@@ -404,7 +396,7 @@ def MakeBarplotTweetType(tweets,by_party=True,inc_no_party=False,no_rt=False,sav
         
 no_rt=True
 MakeBarplotTweetType(tweets,by_party=True,inc_no_party=True,no_rt=no_rt)
-MakeBarplotTweetType(tweets,by_party=True,inc_no_party=False,no_rt=no_rt,save="2016_TweetsType")
+MakeBarplotTweetType(tweets,by_party=True,inc_no_party=False,no_rt=no_rt,save="2020_TweetsType")
 
 #%% Intensity of tweets in time
 #adjust the y_lims depending on the sample chosen and the period of time
@@ -538,4 +530,4 @@ def DisplayWordsCount(tweets,prop=False,save=False):
         plt.pyplot.tight_layout()
         plt.pyplot.savefig(path+"/plots/"+str(save)+'.png', dpi=300)            
 
-DisplayWordsCount(tweets,prop=True,save="2016_WordsCountProp")
+DisplayWordsCount(tweets,prop=True,save="2020_WordsCountProp")

@@ -6,23 +6,7 @@ Created on Mon Dec 21 12:52:57 2020
 """
 #%% Libraries
 
-import tweepy
-import pandas as pd
-import numpy as np
-import matplotlib as plt
-import os.path
-import time
-import math
 import re
-import statsmodels.api as sm
-import seaborn as sns
-import datetime 
-from matplotlib.dates import DayLocator, HourLocator, DateFormatter, drange 
-from matplotlib import cm
-import random
-import matplotlib.lines as mlines
-from textblob import TextBlob
-from sklearn.model_selection import train_test_split
 import random
 
 path='D:/US_Election_Tweets'
@@ -56,6 +40,7 @@ def cleanRealText(text):
 def cleanHastags(text):
     text=re.sub('#[^\s]*',"",text)   
     return(text)
+
 #%% Cleaning the text
 
 election_2016_tweets["real_clean_text"]=election_2016_tweets["real_text"].apply(cleanRealText)
@@ -97,8 +82,7 @@ tweets_test_2016.columns=["text","clean_text","label","mentions_dem",'mentions_r
 path_export=path+"/NLP_HastagsLabel"
 tweets_train_2016.to_csv(path_export+'/tweets_train_2016.csv',index=False)
 tweets_test_2016.to_csv(path_export+'/tweets_test_2016.csv',index=False)
-tweets_train_2016.to_json(path_export+'/tweets_train_2016.json')
-tweets_test_2016.to_json(path_export+'/tweets_test_2016.json')
+
 
 #%% Creating 2020 test and train sets
 ####################### 2020 ###########################
